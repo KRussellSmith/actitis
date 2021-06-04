@@ -1,4 +1,4 @@
-A (hitherto unsuccesful) attempt to get portal rendering to work in WebGl
+A (hitherto unsuccessful) attempt to get portal rendering to work in WebGl
 by porting [CodeParade's NonEuclidean project](https://github.com/HackerPoet/NonEuclidean)
 Currently failed because oblique projection is not working, his method of computing it doesn't works,
 nor do any of the others I've found (e.g. Unity3D's), and I do not know enough about 3D rendering
