@@ -77,39 +77,6 @@ const loadShader = async (gl, url, type) =>
 		uniforms
 	};
 };
-const linkedProgram = async (gl, vertUrl, fragUrl) =>
-{
-	const vertShader = await loadShader(gl, vertUrl, gl.VERTEX_SHADER);
-	const fragShader = await loadShader(gl, fragUrl, gl.FRAGMENT_SHADER);
-
-	const program = gl.createProgram();
-	gl.attachShader(program, vertShader.shader)
-	gl.attachShader(program, fragShader.shader);
-	gl.linkProgram(program);
-
-	const attributes = vertShader.attributes;
-	const uniforms = [...vertShader.uniforms, ...fragShader.uniforms]
-	const attribute = {},
-		uniform = {};
-	for (const attrib of attributes)
-	{
-		Object.defineProperty(attribute, attrib, {
-			get: () => gl.getAttribLocation(program, attrib),
-		});
-	}
-	for (const uni of uniforms)
-	{
-		Object.defineProperty(uniform, uni, {
-			get: () => gl.getUniformLocation(program, uni),
-		});
-	}
-
-	return {
-		program,
-		attribute,
-		uniform,
-	};
-};
 const Mesh = (() =>
 {
 	const { vec3 } = glMatrix;
@@ -253,7 +220,7 @@ const Mesh = (() =>
 		},
 		Model: async (gl, mesh, color = [0.5, 0.2, 0]) =>
 		{
-			const shader = await Shader(gl, '.', 'mesh-shader');
+			const shader = await Shader(gl, 'Shaders', 'mesh-shader');
 
 			const parts = mesh.geometries.map(({ data }) =>
 			{
@@ -575,103 +542,6 @@ const setupArrayBuffer = (
 	gl.vertexAttribPointer(attribute, itemSize, dataType, false, 0, 0);
 };
 
-const Sprite = async (gl) =>
-{
-	const mesh = await Mesh.load('double_quad.obj');
-	const shader = await Shader(gl, '.', 'quad-shader');
-	const { a_position } = shader.attribute;
-	const vao = gl.createVertexArray();
-	gl.bindVertexArray(vao);
-	const buffers = createBuffers(gl, new Array(1));
-	setupArrayBuffer(gl, buffers[0], new Float32Array(mesh.geometries[0].data.position), 3, a_position);
-
-	return {
-		render(projection, view)
-		{
-			shader.use();
-			gl.bindVertexArray(vao);
-
-			const { u_projection, u_view, u_texture } = shader.uniform;
-
-			gl.uniform1i(u_texture, 0);
-			gl.activeTexture(gl.TEXTURE0 + 0);
-
-			gl.uniformMatrix4fv(u_projection, false, projection);
-			gl.uniformMatrix4fv(u_view, false, view);
-			gl.drawArrays(gl.TRIANGLES, 0, mesh.geometries[0].data.position.length / 3);
-			return this;
-		},
-	};
-};
-const Circle = async (gl) =>
-{
-	const pos = new Float32Array([
-		-1, 1,
-		-1, -1,
-		 1, -1,
-		 1, 1]);
-	const indices = new Uint16Array([3, 2, 1, 3, 1, 0]);
-	const colors = (new Array(16)).fill(1);
-
-	const shader = await Shader(gl, 'shaders', 'circle');
-
-	const vao = gl.createVertexArray();
-	gl.bindVertexArray(vao);
-	const { a_position, a_texcoord, a_color } = shader.attribute;
-	const buffers = createBuffers(gl, new Array(4));
-	setupArrayBuffer(gl, buffers[0], pos, 2, a_position);
-	setupArrayBuffer(gl, buffers[1], pos, 2, a_texcoord);
-	setupArrayBuffer(gl, buffers[2], new Float32Array(colors), 4, a_color, gl.DYNAMIC_DRAW);
-
-	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers[3]);
-	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW)
-
-	return {
-		color(r, g = r, b = g, a = 1)
-		{
-			for (let i = 0; i < 4; ++i)
-			{
-				const c = i * 4;
-				colors[c + 0] = r;
-				colors[c + 1] = g;
-				colors[c + 2] = b;
-				colors[c + 3] = a;
-			}
-			gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-			gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(colors));
-			return this;
-		},
-		vcolor(pos, newColors)
-		{
-			gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-			gl.bufferSubData(gl.ARRAY_BUFFER, pos, new Float32Array(newColors));
-			return this;
-		},
-		render(x, y, w, h)
-		{
-			const { u_matrix } = shader.uniform;
-			shader.use();
-			gl.bindVertexArray(vao);
-			let matrix = glMatrix.Mat4.ortho(glMatrix.Mat4.create(), 0, gl.canvas.width, gl.canvas.height, 0, -1000, 1);
-			glMatrix.Mat4.translate(matrix, matrix, [x, y, 0]);
-			glMatrix.Mat4.scale(matrix, matrix, [w, h, 1]);
-			gl.uniformMatrix4fv(u_matrix, false, matrix);
-
-			gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
-			return this;
-		},
-	};
-};
-const Game = {
-	objects: [],
-	renderObjects(camera)
-	{
-		for (const obj of this.objects)
-		{
-
-		}
-	}
-};
 const loadImage = (url, onload) =>
 {
 	const image = new Image();
@@ -771,8 +641,8 @@ const FrameBuffer = gl =>
 };
 const Shader = async (gl, path, name) =>
 {
-	const vert = await loadShader(gl, path + '/' + name + '.vert', gl.VERTEX_SHADER);
-	const frag = await loadShader(gl, path + '/' + name + '.frag', gl.FRAGMENT_SHADER);
+	const vert = await loadShader(gl, `${path}/${name}.vert`, gl.VERTEX_SHADER);
+	const frag = await loadShader(gl, `${path}/${name}.frag`, gl.FRAGMENT_SHADER);
 
 	const program = gl.createProgram();
 	gl.attachShader(program, vert.shader);
@@ -882,8 +752,8 @@ const Portal = (() =>
 		},
 		create: async (gl = (document.createElement('canvas')).getContext('webgl2')) =>
 		{
-			const mesh = await Mesh.load('double_quad.obj');
-			const shader = await Shader(gl, '.', 'portal-shader');
+			const mesh = await Mesh.load('./Models/double_quad.obj');
+			const shader = await Shader(gl, './Shaders', 'portal-shader');
 			const { a_position } = shader.attribute;
 			const vao = gl.createVertexArray();
 			gl.bindVertexArray(vao);
@@ -1076,7 +946,7 @@ const main = async () =>
 			inputs[key].draw(touches);
 		}
 	});
-	const mesh = await Mesh.Model(gl, await Mesh.load('suzanne.obj'));
+	const mesh = await Mesh.Model(gl, await Mesh.load('Models/suzanne.obj'));
 	const { vec2, vec3 } = glMatrix;
 	const player = Player(gl);
 	const sprite = await Portal.create(gl);
@@ -1089,10 +959,10 @@ const main = async () =>
 	player.pos[0] = 0;
 	player.pos[1] = 0.5;
 	player.pos[2] = 10;
-	const roomMesh = await Mesh.Model(gl, await Mesh.load('room.obj'), [0.5, 0.5, 0.5]);
+	const roomMesh = await Mesh.Model(gl, await Mesh.load('Models/room.obj'), [0.5, 0.5, 0.5]);
 	//alert(JSON.stringify(roomMesh));
 	const room = GameObject(gl, roomMesh);
-	const otherRoom = GameObject(gl, await Mesh.Model(gl, await Mesh.load('room.obj'), [0.1, 0.4, 0.1]));
+	const otherRoom = GameObject(gl, await Mesh.Model(gl, await Mesh.load('Models/room.obj'), [0.1, 0.4, 0.1]));
 	otherRoom.pos = [0, -1, 0]
 	otherRoom.scale = [20, 1, 20];
 	/*
